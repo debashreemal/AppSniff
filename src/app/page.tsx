@@ -2,7 +2,16 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 import React, { useState } from 'react';
-import { SearchCode, CheckCircle, ShieldCheck, ShieldAlert, AlertTriangle, XCircle } from 'lucide-react';
+import { SearchCode, CheckCircle, ShieldCheck, ShieldAlert, AlertTriangle, XCircle, Globe, Lock, LockOpen } from 'lucide-react';
+
+type InputType = 'app' | 'website';
+
+interface ParsedInput {
+  type: InputType;
+  appId?: string;
+  platform?: 'android' | 'ios';
+  url?: string;
+}
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -11,31 +20,60 @@ export default function Home() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
 
-  const parseAppId = (input: string) => {
+  const parseInput = (input: string): ParsedInput | null => {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+
     try {
-      if (input.includes('apps.apple.com')) {
-        const match = input.match(/\/id(\d+)/);
-        if (match) return match[1];
+      // Apple App Store URL
+      if (trimmed.includes('apps.apple.com')) {
+        const match = trimmed.match(/\/id(\d+)/);
+        if (match) return { type: 'app', appId: match[1], platform: 'ios' };
       }
-      
-      if (input.includes('id=')) {
-        const urlParams = new URLSearchParams(input.split('?')[1]);
-        return urlParams.get('id');
+
+      // Google Play Store URL
+      if (trimmed.includes('play.google.com') || trimmed.includes('id=')) {
+        let appId: string | null = trimmed;
+        if (trimmed.includes('id=')) {
+          const urlParams = new URLSearchParams(trimmed.split('?')[1]);
+          appId = urlParams.get('id');
+        }
+        if (appId) return { type: 'app', appId, platform: 'android' };
       }
-      return input.trim();
+
+      // Any other URL → website analysis
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return { type: 'website', url: trimmed };
+      }
+
+      // Bare domain (e.g. "example.com") → treat as website
+      if (trimmed.match(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}/)) {
+        return { type: 'website', url: `https://${trimmed}` };
+      }
+
+      // Fallback: treat as app ID
+      return { type: 'app', appId: trimmed, platform: 'android' };
     } catch {
-      return input.trim();
+      return { type: 'app', appId: trimmed, platform: 'android' };
     }
   };
 
-  const simulateScanSteps = async () => {
-    const steps = [
-      "Fetching Google Play Store Metadata...",
+  const simulateScanSteps = async (inputType: InputType) => {
+    const appSteps = [
+      "Fetching App Store Metadata...",
       "Cross-checking Developer with RBI NBFC Registry...",
       "Scraping User Reviews...",
       "Analyzing Permissions with AI...",
       "Generating Final Safety Score..."
     ];
+    const websiteSteps = [
+      "Fetching Website Content...",
+      "Extracting Metadata & Links...",
+      "Cross-checking Company with RBI NBFC Registry...",
+      "Analyzing Content for Scam Signals...",
+      "Generating Final Safety Score..."
+    ];
+    const steps = inputType === 'website' ? websiteSteps : appSteps;
     setScanSteps([]);
     for (let i = 0; i < steps.length; i++) {
       await new Promise(res => setTimeout(res, 800));
@@ -50,25 +88,28 @@ export default function Home() {
     setResult(null);
     setLoading(true);
 
-    const appId = parseAppId(query);
-    const platform = query.includes('apple.com') ? 'ios' : 'android';
-    if (!appId) {
-      setError("Invalid App ID or URL");
+    const parsed = parseInput(query);
+    if (!parsed) {
+      setError("Invalid input. Please paste a Play Store, App Store, or website URL.");
       setLoading(false);
       return;
     }
 
-    const scanAnimPromise = simulateScanSteps();
+    const scanAnimPromise = simulateScanSteps(parsed.type);
 
     try {
+      const body = parsed.type === 'website'
+        ? { type: 'website', url: parsed.url }
+        : { type: 'app', appId: parsed.appId, platform: parsed.platform };
+
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appId, platform })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
       await scanAnimPromise;
-      if (!res.ok) throw new Error(data.error || 'Failed to analyze app');
+      if (!res.ok) throw new Error(data.error || 'Failed to analyze');
       setResult(data);
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred");
@@ -76,6 +117,8 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const isWebsite = result?.type === 'website';
 
   return (
     <>
@@ -99,9 +142,9 @@ export default function Home() {
             Don&apos;t fall for <span className="highlight">fake</span> loan apps.
           </h1>
           <p>
-            Verify if a lending app is registered with the RBI, check what suspicious 
-            permissions they ask for, and read AI-summarized warnings from other users 
-            before you download.
+            Verify if a lending app or website is registered with the RBI, check for 
+            suspicious permissions and scam signals, and read AI-summarized warnings 
+            before you download or share your details.
           </p>
           
           <form onSubmit={handleScan} className="search-wrapper">
@@ -117,7 +160,7 @@ export default function Home() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="search-input"
-                placeholder="Paste Play Store or App Store URL..." 
+                placeholder="Paste Play Store, App Store, or website URL..." 
                 disabled={loading}
               />
               <button type="submit" className="search-btn" disabled={loading || !query}>
@@ -167,17 +210,44 @@ export default function Home() {
               <div className="bg-[var(--bg-surface)] rounded-[36px] p-10 flex flex-col md:flex-row gap-10 items-center shadow-[0_20px_50px_rgba(0,0,0,0.06)]">
                 <div className="w-32 h-32 rounded-3xl overflow-hidden shadow-lg flex-shrink-0 bg-[var(--bg-base)]">
                   {result.app.icon ? (
-                    <img src={result.app.icon} alt="App Icon" className="w-full h-full object-cover" />
+                    <img src={result.app.icon} alt="Icon" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#999] font-semibold">No Icon</div>
+                    <div className="w-full h-full flex items-center justify-center text-[#999]">
+                      {isWebsite ? <Globe className="w-16 h-16" /> : <span className="font-semibold">No Icon</span>}
+                    </div>
                   )}
                 </div>
                 <div className="flex-1 text-center md:text-left">
                   <h2 className="text-3xl font-extrabold text-[#4A4A4A] mb-2">{result.app.title}</h2>
-                  <p className="text-[#777] font-semibold text-lg mb-4">{result.app.developer}</p>
+                  <p className="text-[#777] font-semibold text-lg mb-4">
+                    {isWebsite ? result.app.developer || 'Unknown Organization' : result.app.developer}
+                  </p>
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-[0.95rem] font-bold">
-                    <span className="px-4 py-1.5 bg-[var(--bg-base)] text-[#555] rounded-full">{result.app.installs} Installs</span>
-                    <span className="px-4 py-1.5 bg-[#F6CF71]/20 text-[#d4a017] rounded-full">{Number(result.app.score).toFixed(1)} ★</span>
+                    {isWebsite ? (
+                      <>
+                        <span className="px-4 py-1.5 bg-[var(--bg-base)] text-[#555] rounded-full flex items-center gap-2">
+                          <Globe className="w-4 h-4" /> {result.website?.domain}
+                        </span>
+                        <span className={`px-4 py-1.5 rounded-full flex items-center gap-2 ${
+                          result.website?.isHttps 
+                            ? 'bg-[#45C498]/15 text-[#2d8a6a]' 
+                            : 'bg-[#F89C74]/15 text-[#d96738]'
+                        }`}>
+                          {result.website?.isHttps ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
+                          {result.website?.isHttps ? 'HTTPS Secure' : 'Not Secure'}
+                        </span>
+                        {result.analysis?.isLendingWebsite && (
+                          <span className="px-4 py-1.5 bg-[#F6CF71]/20 text-[#d4a017] rounded-full">
+                            Lending Platform
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="px-4 py-1.5 bg-[var(--bg-base)] text-[#555] rounded-full">{result.app.installs} Installs</span>
+                        <span className="px-4 py-1.5 bg-[#F6CF71]/20 text-[#d4a017] rounded-full">{Number(result.app.score).toFixed(1)} ★</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col items-center justify-center">
@@ -204,7 +274,7 @@ export default function Home() {
                     {result.rbiRegistered ? (
                       <>
                         <li className="flex items-start gap-3 text-[1.1rem] font-medium text-[#555]">
-                          <span className="text-[#45C498] font-black mt-0.5">•</span> Verified developer match
+                          <span className="text-[#45C498] font-black mt-0.5">•</span> Verified {isWebsite ? 'company' : 'developer'} match
                         </li>
                         <li className="flex items-start gap-3 text-[1.1rem] font-medium text-[#555]">
                           <span className="text-[#45C498] font-black mt-0.5">•</span> Official RBI-registered NBFC
@@ -216,7 +286,7 @@ export default function Home() {
                     ) : (
                       <>
                         <li className="flex items-start gap-3 text-[1.1rem] font-medium text-[#555]">
-                          <span className="text-[#F89C74] font-black mt-0.5">•</span> Developer not found in registry
+                          <span className="text-[#F89C74] font-black mt-0.5">•</span> {isWebsite ? 'Company' : 'Developer'} not found in registry
                         </li>
                         <li className="flex items-start gap-3 text-[1.1rem] font-medium text-[#555]">
                           <span className="text-[#F89C74] font-black mt-0.5">•</span> Unverified lending institution
@@ -244,18 +314,19 @@ export default function Home() {
                       </li>
                     ))}
                   </ul>
-                  {result.analysis.fakeReviewSuspected && (
+                  {!isWebsite && result.analysis.fakeReviewSuspected && (
                     <div className="mt-5 inline-flex items-center gap-2 bg-[#F89C74]/15 text-[#d96738] px-4 py-2 rounded-xl text-sm font-bold">
                       <AlertTriangle className="w-5 h-5" /> Fake Reviews Detected
                     </div>
                   )}
                 </div>
-              {/* Suspicious Permissions */}
+
+              {/* Suspicious Permissions / Red Flags */}
               {result.analysis.suspiciousPermissions?.length > 0 && (
                 <div className="bg-[var(--bg-surface)] rounded-[32px] p-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)] relative overflow-hidden flex-1 w-full flex flex-col">
                    <div className="absolute top-0 left-0 w-2 h-full bg-[#F89C74]"></div>
                    <h3 className="font-bold text-xl text-[#4A4A4A] mb-5 flex items-center gap-3">
-                    <AlertTriangle className="w-7 h-7 text-[#F89C74]" /> Suspicious Permissions
+                    <AlertTriangle className="w-7 h-7 text-[#F89C74]" /> {isWebsite ? 'Red Flags Found' : 'Suspicious Permissions'}
                   </h3>
                   <ul className="space-y-3">
                     {result.analysis.suspiciousPermissions.map((perm: string, idx: number) => (
@@ -267,6 +338,21 @@ export default function Home() {
                 </div>
               )}
               </div>
+
+              {/* Website-specific: External Links count */}
+              {isWebsite && result.website && (
+                <div className="bg-[var(--bg-surface)] rounded-[24px] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.04)] flex items-center gap-4">
+                  <Globe className="w-6 h-6 text-[#999] flex-shrink-0" />
+                  <p className="text-[1rem] font-medium text-[#777]">
+                    <span className="font-bold text-[#4A4A4A]">{result.website.externalLinks}</span> external links found on this page
+                    {!result.website.isHttps && (
+                      <span className="ml-3 inline-flex items-center gap-1 text-[#d96738] font-bold">
+                        <LockOpen className="w-4 h-4" /> This site does not use HTTPS
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -290,7 +376,7 @@ export default function Home() {
             <section id="features">
               <div className="features-header">
                 <h2>Comprehensive Security</h2>
-                <p>We analyze every aspect of the app to keep you safe.</p>
+                <p>We analyze every aspect of the app or website to keep you safe.</p>
               </div>
 
               <div className="features-grid text-left">
@@ -303,7 +389,7 @@ export default function Home() {
                   </div>
                   <h3>RBI Registry Check</h3>
                   <p>
-                    We instantly cross-reference the app&apos;s developer and associated NBFC with 
+                    We instantly cross-reference the app&apos;s developer or website&apos;s company with 
                     the official Reserve Bank of India registry to ensure they are legal.
                   </p>
                 </div>
@@ -316,10 +402,10 @@ export default function Home() {
                       <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                   </div>
-                  <h3>Permission Analysis</h3>
+                  <h3>Permission &amp; Scam Analysis</h3>
                   <p>
-                    Predatory apps steal your contacts and photos to blackmail you later. 
-                    We flag dangerous permissions before you even install the app.
+                    For apps, we flag dangerous permissions. For websites, we detect scam signals 
+                    like fake RBI claims, urgency tactics, and missing security certificates.
                   </p>
                 </div>
 
@@ -329,10 +415,10 @@ export default function Home() {
                       <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                     </svg>
                   </div>
-                  <h3>AI Review Insights</h3>
+                  <h3>AI Review &amp; Content Insights</h3>
                   <p>
-                    Our AI scans hundreds of user reviews looking for keywords like &quot;harassment&quot;, 
-                    &quot;fake&quot;, or &quot;high interest&quot; to uncover hidden red flags.
+                    Our AI scans app reviews for harassment keywords and website content 
+                    for predatory lending red flags — uncovering hidden dangers.
                   </p>
                 </div>
               </div>
@@ -342,7 +428,7 @@ export default function Home() {
               <div className="about-content">
                 <div className="features-header">
                   <h2>About <span className="highlight">AppSniff</span></h2>
-                  <p>Built to protect Indian consumers from the surge of predatory lending apps.</p>
+                  <p>Built to protect Indian consumers from the surge of predatory lending apps and websites.</p>
                 </div>
 
                 <div className="features-grid text-left">
@@ -354,7 +440,7 @@ export default function Home() {
                     </div>
                     <h3>Our Mission</h3>
                     <p>
-                      India has seen a surge in predatory lending apps that harass users, steal personal 
+                      India has seen a surge in predatory lending apps and websites that harass users, steal personal 
                       data, and operate without any regulatory license. AppSniff was built to fight back.
                     </p>
                   </div>
@@ -369,7 +455,7 @@ export default function Home() {
                     </div>
                     <h3>The Problem</h3>
                     <p>
-                      Thousands of unregistered loan apps operate illegally on app stores, using 
+                      Thousands of unregistered loan apps and websites operate illegally, using 
                       harassment, data theft, and hidden fees to exploit vulnerable borrowers.
                     </p>
                   </div>
@@ -384,8 +470,8 @@ export default function Home() {
                     </div>
                     <h3>Our Approach</h3>
                     <p>
-                      We combine real-time Play Store metadata, the official RBI NBFC registry, and 
-                      advanced AI analysis to give you a safety report — before you install.
+                      We combine real-time app store metadata, website content analysis, the official RBI NBFC registry, and 
+                      advanced AI to give you a safety report — before you install or share your details.
                     </p>
                   </div>
                 </div>
@@ -396,7 +482,7 @@ export default function Home() {
               <div className="contact-content">
                 <div className="features-header">
                   <h2>Get in <span className="highlight">Touch</span></h2>
-                  <p>Have questions, feedback, or want to report a suspicious app?</p>
+                  <p>Have questions, feedback, or want to report a suspicious app or website?</p>
                 </div>
 
                 <div className="features-grid text-left">
@@ -421,9 +507,9 @@ export default function Home() {
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                       </svg>
                     </div>
-                    <h3>Report an App</h3>
+                    <h3>Report an App or Website</h3>
                     <p>
-                      Spotted a suspicious lending app? Flag it through our platform and help 
+                      Spotted a suspicious lending app or website? Flag it through our platform and help 
                       protect others from falling victim to scams.
                     </p>
                   </div>
@@ -440,7 +526,7 @@ export default function Home() {
                     <h3>Community</h3>
                     <p>
                       Join our growing community of users who are fighting back against 
-                      predatory lending apps across India.
+                      predatory lending apps and websites across India.
                     </p>
                   </div>
                 </div>
