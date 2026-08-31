@@ -1,8 +1,8 @@
-# 🐾 AppSniff: Sniff Out Fake Loan Apps Before They Bite
+# 🐾 AppSniff: Sniff Out Fake Loan Apps or Websites Before They Bite
 
 ## The Problem
 
-India is flooded with **predatory loan apps** that masquerade as legitimate lending platforms. They lure users with instant approvals, then steal contacts, photos, and personal data — weaponizing it for **blackmail, harassment, and extortion**. Millions of victims have no way to tell a real RBI-registered lender from a scam before it's too late.
+India is flooded with **predatory loan apps and Websites** that masquerade as legitimate lending platforms. They lure users with instant approvals, then steal contacts, photos, and personal data — weaponizing it for **blackmail, harassment, and extortion**. Millions of victims have no way to tell a real RBI-registered lender from a scam before it's too late.
 
 ## The Solution
 
@@ -10,7 +10,7 @@ India is flooded with **predatory loan apps** that masquerade as legitimate lend
 
 ## How It Works
 
-1. **Paste a Link:** Drop any Google Play Store or Apple App Store URL into the search bar.
+1. **Paste a Link:** Drop any Google Play Store or Apple App Store URL or websites into the search bar.
 2. **Deep Scan Begins:** AppSniff kicks off an automated 5-step analysis pipeline:
    - 📦 **Metadata Scraping** — Fetches the app's title, developer, icon, installs, and ratings.
    - 🏦 **RBI Registry Cross-Check** — Uses fuzzy matching (`pg_trgm`) against the official RBI NBFC database stored in Supabase.
