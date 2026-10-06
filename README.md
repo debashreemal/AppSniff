@@ -127,25 +127,6 @@ This creates:
 - `pg_trgm` extension for fuzzy text matching
 - `search_nbfc()` RPC function for similarity-based lookups
 
-## Project Structure
-
-```
-AppSniff/
-├── src/
-│   └── app/
-│       ├── page.tsx              # Main UI — search, scan animation, results dashboard
-│       ├── layout.tsx            # Root layout with metadata
-│       ├── globals.css           # Global styles & design system
-│       └── api/
-│           └── analyze/
-│               └── route.ts      # Core API — scraping, RBI check, AI analysis
-├── public/                       # Static assets
-├── setup_database.sql            # Supabase schema for RBI NBFC registry
-├── package.json
-├── next.config.ts
-├── tsconfig.json
-└── .env                          # API keys (not committed)
-```
 
 ## Key Features
 
